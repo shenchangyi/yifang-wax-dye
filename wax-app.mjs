@@ -5,7 +5,7 @@ import {TEMPLATES as templates,FEATURED_COUNT,templateSource} from './wax-templa
 import {PALETTES,DEFAULT_PALETTE,paletteById} from './wax-palettes.mjs';
 import {KNOWLEDGE,cardForStep,nextCard} from './wax-knowledge.mjs';
 import {WaxTrail} from './fluid-trail.mjs';
-import {WaxRemovalRain,dewaxFront} from './wax-removal.mjs';
+import {WaxPixelCollapse} from './wax-removal.mjs';
 
 const $=selector=>document.querySelector(selector);
 const N=640,canvas=$('#stage'),ctx=canvas.getContext('2d');
@@ -23,8 +23,8 @@ let busy=false,loadVersion=0,drawVersion=0,timer=0,started=0,dyeBefore=0,drag=fa
 let goldDirty=true,dewaxProgress=0,dewaxRunning=false;
 let artRevision=0,exportCache=new Map(),saveUrl='';
 
-const removal=new WaxRemovalRain($('#dewax-layer'),{
- onFrame:(progress,time)=>{dewaxProgress=progress;draw(time);},
+const removal=new WaxPixelCollapse($('#dewax-layer'),{
+ onFrame:progress=>{dewaxProgress=progress;},
  onComplete:()=>{if(!dewaxRunning)return;dewaxRunning=false;dewaxProgress=1;$('#canvas-wrap').removeAttribute('aria-busy');go(6);}
 });
 
@@ -55,7 +55,7 @@ function transition(){
 }
 
 $('#close-dialog').onclick=()=>$('#dialog').close();
-$('#help').onclick=()=>modal('<div class="sheet-title"><span class="mini-seal">蜡</span><p>一方蜡染</p><h2>描一笔蜡，留一方白。</h2></div><p>把图纸映到布上，沿提示描蜡或辅助填蜡。蜡覆盖的位置会形成防染留白，浸染完成后得到属于你的作品。</p><p>这是受传统蜡染启发的数字手作，不是实物染色预测。上传图片只在当前设备处理。</p>','paper-sheet');
+$('#help').onclick=()=>modal('<div class="sheet-title"><span class="mini-seal">蜡</span><p>一方蜡染</p><h2>描一笔蜡，留一方白。</h2></div><p>把图纸映到布上，沿提示描蜡或辅助填蜡。蜡覆盖的位置会形成防染留白，浸染完成后得到属于你的作品。</p><p>这是受传统蜡染启发的数字手作，不是实物染色预测。上传图片只在当前设备处理。</p><p class="motion-credit">去蜡动效参考 <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">Zaron Chen《Pixel Collapse》· CC BY-NC-SA 3.0</a>。</p>','paper-sheet');
 $('#reset').hidden=false;
 $('#reset').onclick=()=>modal('<div class="sheet-title"><span class="mini-seal">重</span><h2>重新制作？</h2></div><p>尚未保存的作品会被清空。</p><button id="confirm-reset" class="primary">重新开始</button>','paper-sheet');
 $('#mobile-progress').onclick=()=>{
@@ -139,7 +139,7 @@ function render(){
  if(state.step===2)html+=`<p class="description">金色是已经涂上的蜡。笔触只落在图案区域，细小位置可以辅助完成。</p><div class="big-number"><span id="coverage">${Math.round(coverage(target,wax)*100)}</span><small>%</small></div>`+slider('brush','蜡笔大小',state.brush,5,42,1)+`<div class="tool-row"><button id="undo">撤回上一笔</button><button id="assist">辅助填完图案</button></div><label class="hint-box preview-toggle"><input id="preview" type="checkbox" ${state.preview?'checked':''}> 查看当前涂蜡的染后预览</label><canvas id="mini-preview" class="wax-mini" width="160" height="160" aria-label="当前描蜡的染后小样" hidden></canvas><p class="info-note">可保留没涂满的地方；至少覆盖 5% 图案后才能入染。</p>`;
  if(state.step===3)html+=`<p class="description">每次使用一种颜色。靛蓝是传统视觉参考，其余为数字创意配色。</p>${paletteChoices()}<div class="tool-row fabric-choice"><button data-fabric="cotton" aria-pressed="${state.fabric==='cotton'}">${state.fabric==='cotton'?'✓ ':''}细棉布</button><button data-fabric="linen" aria-pressed="${state.fabric==='linen'}">${state.fabric==='linen'?'✓ ':''}棉麻</button></div><p class="material-note">${state.fabric==='cotton'?'细棉布：纹理细腻、颗粒更轻，适合五官与细线较多的图纸。':'棉麻：表面颗粒更明显，画面更质朴；图案形状与细节保持不变。'}</p>`+slider('strength','颜色浓淡',Math.round(state.strength*100),40,100,1,'%')+slider('bleed','边缘渗色',Math.round(state.bleed*100),0,65,1,'%')+`<p class="material-note">渗色调低，蓝白交界更利落；调高，边沿带入更多浅色并略有斑驳，不改变图案形状。</p><p class="info-note">布料、颜色与渗色均为视觉模拟，不代表实物染色预测。</p>`;
  if(state.step===4)html+=`<p class="description">白布先保持原色。染液完全没过布面后，达到 100% 才显示染色结果。</p><div class="big-number"><span id="dye-progress">${Math.floor(state.immersion*100)}</span><small>%</small></div><button id="start-dye" class="soft-button">${state.immersion>=1?'重新浸染':'开始 / 继续浸染'}</button>`;
- if(state.step===5)html+=`<p class="description">点击布面或按钮，让金黄色蜡迹随粒子落下。约 2.6 秒后，防染留白会完整显现。</p><button id="remove-wax" class="soft-button">洗去蜡 · 显出图案</button>`;
+ if(state.step===5)html+=`<p class="description">点击布面或按钮，金黄色蜡迹会分解成方形像素并向下崩落。约 2.6 秒后，防染留白完整显现。</p><button id="remove-wax" class="soft-button">洗去蜡 · 显出图案</button>`;
  if(state.step===6)html+=`<span class="result-tag">${palette().name} · ${state.fabric==='linen'?'棉麻':'细棉布'} · 手作体验</span><p class="description">${esc(state.name)}，染好了。保存干净作品图，也可以通过手机系统分享给朋友。</p><div class="completion-actions"><button id="open-save" class="primary">保存作品</button><button id="share-work" class="soft-button" ${navigator.share?'disabled':'hidden'}>${navigator.share?'正在准备分享图片…':'当前浏览器不支持系统分享'}</button></div><div class="result-tools"><button id="redye" class="soft-button">换一种颜色</button><button id="repattern" class="soft-button">换一张图纸</button></div><p class="save-note">默认生成 1600 × 1600 PNG。系统是否提供“保存到相册”或微信，由手机和浏览器决定。</p>`;
  html+=knowledgeEntry();
  $('#panel').innerHTML=html;
@@ -161,10 +161,11 @@ function go(index){
 }
 function startDewax(){
  if(dewaxRunning||state.step!==5)return;
+ clearTimeout(timer);$('#toast').classList.remove('visible');
  dewaxRunning=true;dewaxProgress=0;$('#canvas-wrap').setAttribute('aria-busy','true');
  const button=$('#remove-wax'),next=$('#next'),back=$('#back');
- if(button){button.disabled=true;button.textContent='金色蜡迹正在落下…';}if(next)next.disabled=true;if(back)back.disabled=true;
- removal.start();
+ if(button){button.disabled=true;button.textContent='金色像素正在崩落…';}if(next)next.disabled=true;if(back)back.disabled=true;
+ removal.start(wax,N,state.seed);draw();
 }
 function bind(){
  const more=$('#more-templates');if(more)more.onclick=()=>{showMore=!showMore;render();};
@@ -253,7 +254,7 @@ function draw(time=performance.now()){
   wc.putImageData(new ImageData(data,N,N),0,0);ctx.drawImage(work,margin,margin,size,size);
  }
  if(state.step===5){
-  const front=dewaxFront(dewaxProgress);ctx.save();ctx.beginPath();ctx.rect(margin,front,size,margin+size-front);ctx.clip();ctx.drawImage(waxLayer(),margin,margin,size,size);ctx.restore();
+  if(!dewaxRunning)ctx.drawImage(waxLayer(),margin,margin,size,size);
   if(!dewaxRunning){ctx.fillStyle='rgba(248,243,232,.88)';ctx.fillRect(240,371,320,58);ctx.fillStyle='#26384c';ctx.font='20px "Songti SC",serif';ctx.textAlign='center';ctx.fillText('点击布面 · 洗去防染的蜡',400,407);}
  }
  const mini=$('#mini-preview');if(mini){mini.hidden=!state.preview;if(state.preview)mini.getContext('2d').drawImage(dyed(),0,0,160,160);}
