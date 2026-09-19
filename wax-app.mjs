@@ -42,11 +42,8 @@ function modal(html,className=''){
  if(!dialog.open)dialog.showModal();
 }
 function applyTheme(){
- const p=palette(),root=document.documentElement;
- root.style.setProperty('--accent',p.accent);root.style.setProperty('--accent-dark',p.dark);
- root.style.setProperty('--accent-soft',p.soft);root.style.setProperty('--accent-wash',p.wash);
- root.style.setProperty('--scene-hue',p.hue);document.body.dataset.palette=p.id;
- const meta=document.querySelector('meta[name=theme-color]');if(meta)meta.content=p.accent;
+ const p=palette();document.body.dataset.palette=p.id;
+ const meta=document.querySelector('meta[name=theme-color]');if(meta)meta.content='#6f3d17';
 }
 function invalidateResult(){
  dirty=true;cached=null;goldDirty=true;state.immersion=0;state.dyeComplete=false;artRevision++;exportCache.clear();
@@ -59,11 +56,11 @@ function transition(){
 $('#close-dialog').onclick=()=>$('#dialog').close();
 function updateSoundToggle(){
  const button=$('#sound-toggle'),enabled=audio.isEnabled();
- button.textContent=enabled?'音效 开':'音效 关';button.setAttribute('aria-pressed',String(enabled));button.setAttribute('aria-label',enabled?'关闭交互音效':'开启交互音效');
+ button.textContent=enabled?'声音 开':'声音 关';button.setAttribute('aria-pressed',String(enabled));button.setAttribute('aria-label',enabled?'关闭背景音乐和交互音效':'开启背景音乐和交互音效');
 }
 $('#sound-toggle').onclick=()=>{audio.setEnabled(!audio.isEnabled());updateSoundToggle();};
 updateSoundToggle();
-$('#help').onclick=()=>modal('<div class="sheet-title"><span class="mini-seal">蜡</span><p>一方蜡染</p><h2>描一笔蜡，留一方白。</h2></div><p>把图纸映到布上，沿提示描蜡或辅助填蜡。蜡覆盖的位置会形成防染留白，浸染完成后得到属于你的作品。</p><p>这是受传统蜡染启发的数字手作，不是实物染色预测。上传图片只在当前设备处理。</p><p class="motion-credit">去蜡动效参考 <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">Zaron Chen《Pixel Collapse》· CC BY-NC-SA 3.0</a>。</p>','paper-sheet');
+$('#help').onclick=()=>modal('<div class="sheet-title"><span class="mini-seal">蜡</span><p>一方蜡染</p><h2>描一笔蜡，留一方白。</h2></div><p>把图纸映到布上，沿提示描蜡或辅助填蜡。蜡覆盖的位置会形成防染留白，浸染完成后得到属于你的作品。</p><p>如果不便拖动画布，可以用键盘聚焦“辅助填完图案”并确认，同样可以继续完成作品。</p><p>这是受传统蜡染启发的数字手作，不是实物染色预测。上传图片只在当前设备处理。</p><p class="motion-credit">去蜡动效参考 <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">Zaron Chen《Pixel Collapse》· CC BY-NC-SA 3.0</a>。</p>','paper-sheet');
 $('#reset').hidden=false;
 $('#reset').onclick=()=>modal('<div class="sheet-title"><span class="mini-seal">重</span><h2>重新制作？</h2></div><p>尚未保存的作品会被清空。</p><button id="confirm-reset" class="primary">重新开始</button>','paper-sheet');
 $('#mobile-progress').onclick=()=>{
@@ -138,7 +135,7 @@ function render(){
  $('#stage-meta').textContent=`${state.fabric==='linen'?'棉麻':'细棉布'} · ${palette().name}`;
  $('#canvas-hint').textContent=state.step===2?'按住画布，沿灰色图案描蜡；画布之外仍可上下滚动。':'图案里的每一处细节，都留在这一方布上。';
  const headings=['把喜欢的图案，染进布里。','先看清，哪里会留白。','沿着图案，慢慢描蜡。','调一抹属于你的颜色。','让颜色，慢慢进入纤维。','洗去蜡，留下图案。','这一方蜡染，属于你。'];
- let html=`<p class="eyebrow">一方蜡染 / ${STEPS[state.step]}</p><h2>${headings[state.step]}</h2>`;
+ let html=`<h2>${headings[state.step]}</h2><p class="chapter-mark">第 ${String(state.step+1).padStart(2,'0')} 章 · ${STEPS[state.step]}</p>`;
  if(state.step===0){
   const visible=showMore?templates:templates.slice(0,FEATURED_COUNT),remaining=templates.length-FEATURED_COUNT;
   html+=`<p class="description">选一张人物图纸，或带上自己的黑白画。保留内部细节，不自动添加边饰。</p><div class="template-grid wax-gallery">${visible.map(t=>`<button class="template-button ${t.id===state.id?'selected':''}" data-template="${t.id}" aria-pressed="${t.id===state.id}">${t.src?`<img src="${t.src}" alt="">`:`<canvas data-mask-thumb="${t.id}" width="160" height="100" aria-hidden="true"></canvas>`}<span>${t.name}</span><small>${t.kind}</small></button>`).join('')}</div><button id="more-templates" class="more-templates" aria-expanded="${showMore}">${showMore?'收起更多图纸 ↑':`更多图纸 · 还有 ${remaining} 张 →`}</button><button id="upload" class="upload-button">＋ 上传黑白图纸 / 透明 PNG</button><input id="file" type="file" accept="image/png,image/jpeg" hidden><p class="upload-note">PNG / JPG，最多 8 MB、1600 万像素。照片自动转线稿暂未开放。</p>`;
@@ -290,11 +287,11 @@ function artworkCanvas(size=1600){
 }
 function shareCardCanvas(){
  const card=document.createElement('canvas');card.width=1200;card.height=1600;const g=card.getContext('2d'),art=artworkCanvas(1200);
- g.fillStyle='#f3eee2';g.fillRect(0,0,1200,1600);g.fillStyle='#ded3bf';g.fillRect(58,78,1084,1084);g.drawImage(art,80,100,1040,1040);
- g.fillStyle='#26352f';g.textAlign='center';g.font='64px "STKaiti","KaiTi","Kaiti SC",serif';g.fillText('一方蜡染',600,1288);
- g.font='34px "Songti SC","Noto Serif CJK SC",serif';g.fillStyle='#6f685c';g.fillText('描一笔蜡，留一方白',600,1350);
- g.font='26px "Songti SC","Noto Serif CJK SC",serif';g.fillStyle='#857d70';g.fillText(`${state.name} · ${palette().name} · ${state.fabric==='linen'?'棉麻':'细棉布'}`,600,1430);
- g.fillStyle='#a84a3c';g.fillRect(985,1300,72,72);g.fillStyle='#f7ebd8';g.font='42px serif';g.fillText('染',1021,1351);return card;
+  g.fillStyle='#f5ead4';g.fillRect(0,0,1200,1600);g.fillStyle='#c8a66a';g.fillRect(58,78,1084,1084);g.fillStyle='#ead8b9';g.fillRect(70,90,1060,1060);g.drawImage(art,80,100,1040,1040);
+  g.fillStyle='#4b250f';g.textAlign='center';g.font='64px "Ma Shan Zheng","STKaiti","KaiTi",serif';g.fillText('一方蜡染',600,1288);
+  g.font='34px "Noto Serif SC","Songti SC",serif';g.fillStyle='#6f3d17';g.fillText('描一笔蜡，留一方白',600,1350);
+  g.font='26px "PingFang SC","Microsoft YaHei",sans-serif';g.fillStyle='#806342';g.fillText(`${state.name} · ${palette().name} · ${state.fabric==='linen'?'棉麻':'细棉布'}`,600,1430);
+  g.fillStyle='#a34835';g.fillRect(985,1300,72,72);g.fillStyle='#f7ebd8';g.font='42px serif';g.fillText('染',1021,1351);return card;
 }
 const toBlob=canvas=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('图片生成失败')),'image/png'));
 function ensureExport(mode='art'){
