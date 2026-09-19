@@ -6,10 +6,12 @@ import {PALETTES,DEFAULT_PALETTE,paletteById} from './wax-palettes.mjs';
 import {KNOWLEDGE,cardForStep,nextCard} from './wax-knowledge.mjs';
 import {WaxTrail} from './fluid-trail.mjs';
 import {WaxPixelCollapse} from './wax-removal.mjs';
+import {WaxAudio} from './wax-audio.mjs';
 
 const $=selector=>document.querySelector(selector);
 const N=640,canvas=$('#stage'),ctx=canvas.getContext('2d');
 const trail=new WaxTrail($('#fluid-layer'));
+const audio=new WaxAudio();
 const work=document.createElement('canvas');work.width=work.height=N;
 const wc=work.getContext('2d',{willReadFrequently:true});
 const result=document.createElement('canvas');result.width=result.height=N;
@@ -55,6 +57,12 @@ function transition(){
 }
 
 $('#close-dialog').onclick=()=>$('#dialog').close();
+function updateSoundToggle(){
+ const button=$('#sound-toggle'),enabled=audio.isEnabled();
+ button.textContent=enabled?'音效 开':'音效 关';button.setAttribute('aria-pressed',String(enabled));button.setAttribute('aria-label',enabled?'关闭交互音效':'开启交互音效');
+}
+$('#sound-toggle').onclick=()=>{audio.setEnabled(!audio.isEnabled());updateSoundToggle();};
+updateSoundToggle();
 $('#help').onclick=()=>modal('<div class="sheet-title"><span class="mini-seal">蜡</span><p>一方蜡染</p><h2>描一笔蜡，留一方白。</h2></div><p>把图纸映到布上，沿提示描蜡或辅助填蜡。蜡覆盖的位置会形成防染留白，浸染完成后得到属于你的作品。</p><p>这是受传统蜡染启发的数字手作，不是实物染色预测。上传图片只在当前设备处理。</p><p class="motion-credit">去蜡动效参考 <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">Zaron Chen《Pixel Collapse》· CC BY-NC-SA 3.0</a>。</p>','paper-sheet');
 $('#reset').hidden=false;
 $('#reset').onclick=()=>modal('<div class="sheet-title"><span class="mini-seal">重</span><h2>重新制作？</h2></div><p>尚未保存的作品会被清空。</p><button id="confirm-reset" class="primary">重新开始</button>','paper-sheet');
@@ -149,7 +157,7 @@ function render(){
  bind();draw();
  if(state.step===6)primeExport();
 }
-function stopAnimation(){cancelAnimationFrame(drawVersion);drawVersion=0;started=0;removal.stop();dewaxRunning=false;$('#canvas-wrap').removeAttribute('aria-busy');}
+function stopAnimation(){cancelAnimationFrame(drawVersion);drawVersion=0;started=0;removal.stop();audio.stopAll();dewaxRunning=false;$('#canvas-wrap').removeAttribute('aria-busy');}
 function go(index){
  if(busy)return;
  if(index===6&&state.step===5&&dewaxProgress<1){startDewax();return;}
@@ -165,6 +173,7 @@ function startDewax(){
  dewaxRunning=true;dewaxProgress=0;$('#canvas-wrap').setAttribute('aria-busy','true');
  const button=$('#remove-wax'),next=$('#next'),back=$('#back');
  if(button){button.disabled=true;button.textContent='金色像素正在崩落…';}if(next)next.disabled=true;if(back)back.disabled=true;
+ audio.collapse(removal.duration/1000);
  removal.start(wax,N,state.seed);draw();
 }
 function bind(){
@@ -197,6 +206,7 @@ function bind(){
  document.querySelectorAll('button[data-palette]').forEach(button=>button.onclick=()=>{state.paletteId=button.dataset.palette;invalidateResult();render();});
  const startDye=$('#start-dye');if(startDye)startDye.onclick=()=>{
   stopAnimation();if(state.dyeComplete){state.immersion=0;state.dyeComplete=false;}dyeBefore=state.immersion;started=performance.now();
+  audio.immersion(5.5*(1-dyeBefore));
   const animate=now=>{
    state.immersion=clamp(dyeBefore+(now-started)/5500);$('#dye-progress').textContent=Math.floor(state.immersion*100);draw(now);
    if(state.immersion<1)drawVersion=requestAnimationFrame(animate);else{state.dyeComplete=true;started=0;drawVersion=0;notify('浸染完成，可以去蜡了。');}
@@ -264,14 +274,14 @@ function trailPoint(point){return{x:(72+point.x/N*656)/800,y:(72+point.y/N*656)/
 canvas.addEventListener('pointerdown',event=>{
  if(state.step===5){startDewax();return;}if(state.step!==2||busy)return;
  const p=point(event);if(p.x<0||p.y<0||p.x>=N||p.y>=N)return;
- event.preventDefault();saveUndo();drag=true;last=p;canvas.setPointerCapture(event.pointerId);paint(target,wax,N,p.x,p.y,state.brush);const feedback=trailPoint(p);trail.splat(feedback.x,feedback.y,state.brush,event.timeStamp);invalidateResult();draw();
+ event.preventDefault();saveUndo();drag=true;last=p;audio.startWax();audio.updateWax(.18,event.pressure||.5);canvas.setPointerCapture(event.pointerId);paint(target,wax,N,p.x,p.y,state.brush);const feedback=trailPoint(p);trail.splat(feedback.x,feedback.y,state.brush,event.timeStamp);invalidateResult();draw();
 });
 canvas.addEventListener('pointermove',event=>{
  if(!drag)return;const p=point(event),distance=Math.hypot(p.x-last.x,p.y-last.y),steps=Math.max(1,Math.ceil(distance/(state.brush*.45)));
  for(let index=1;index<=steps;index++)paint(target,wax,N,last.x+(p.x-last.x)*index/steps,last.y+(p.y-last.y)*index/steps,state.brush);
- const feedback=trailPoint(p);trail.splat(feedback.x,feedback.y,state.brush,event.timeStamp);last=p;dirty=true;cached=null;draw();
+ audio.updateWax(Math.min(1,distance/24),event.pressure||.5);const feedback=trailPoint(p);trail.splat(feedback.x,feedback.y,state.brush,event.timeStamp);last=p;dirty=true;cached=null;draw();
 });
-function finish(){trail.end();if(!drag)return;drag=false;last=null;const value=$('#coverage');if(value)value.textContent=Math.round(coverage(target,wax)*100);}
+function finish(){trail.end();audio.stopWax();if(!drag)return;drag=false;last=null;const value=$('#coverage');if(value)value.textContent=Math.round(coverage(target,wax)*100);}
 canvas.addEventListener('pointerup',finish);canvas.addEventListener('pointercancel',finish);canvas.addEventListener('lostpointercapture',finish);
 
 function artworkCanvas(size=1600){
@@ -303,7 +313,7 @@ async function openSavePanel(mode){
  try{
   const blob=await ensureExport(mode);if(saveUrl)URL.revokeObjectURL(saveUrl);saveUrl=URL.createObjectURL(blob);
   const canShare=Boolean(navigator.share&&navigator.canShare&&navigator.canShare({files:[new File([blob],'一方蜡染.png',{type:'image/png'})]}));
-  modal(`<section class="save-panel"><div class="sheet-title"><span class="mini-seal">存</span><p>保存作品</p><h2>${mode==='card'?'竖版分享卡':'干净作品图'}</h2></div><div class="export-tabs"><button data-export-mode="art" aria-pressed="${mode==='art'}">纯作品</button><button data-export-mode="card" aria-pressed="${mode==='card'}">分享卡</button></div><img class="save-preview" src="${saveUrl}" alt="${mode==='card'?'带题签的竖版蜡染分享卡':'蜡染作品'}"><p class="save-guidance">手机可长按图片尝试保存；“下载 PNG”可能进入浏览器下载目录。系统是否显示相册或微信，由设备决定。</p><div class="dialog-actions"><button id="download-export" class="primary">下载 PNG</button>${canShare?'<button id="share-export" class="secondary">系统分享</button>':''}</div></section>`,'paper-sheet save-sheet');
+  modal(`<section class="save-panel"><div class="sheet-title"><span class="mini-seal">存</span><p>保存作品</p><h2>${mode==='card'?'竖版分享卡':'干净作品图'}</h2></div><div class="export-tabs"><button data-export-mode="art" aria-pressed="${mode==='art'}">纯作品</button><button data-export-mode="card" aria-pressed="${mode==='card'}">分享卡</button></div><img class="save-preview" src="${saveUrl}" alt="${mode==='card'?'带题签的竖版蜡染分享卡':'蜡染作品'}"><p class="save-guidance">手机可长按图片尝试保存；“下载 PNG”可能进入浏览器下载目录。系统是否显示相册或微信，由设备决定。</p><div class="dialog-actions"><button id="download-export" class="primary">下载 PNG</button>${canShare?'<button id="share-export" class="secondary">系统分享</button>':''}</div></section>`,`paper-sheet save-sheet save-sheet-${mode}`);
  }catch{modal('<div class="sheet-title"><span class="mini-seal">歉</span><h2>图片生成失败</h2></div><p>作品仍保留在页面中，请关闭后重试。</p>','paper-sheet');}
 }
 async function prepared(mode='art'){return {blob:await ensureExport(mode),name:`一方蜡染-${state.name.replace(/[\\/:*?"<>|]/g,'_')}${mode==='card'?'-分享卡':''}.png`};}
