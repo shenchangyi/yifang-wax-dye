@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <meta name="theme-color" content="#315f7f"><meta name="description" content="描一笔蜡，留一方白。选择图纸、亲手描蜡、浸染并保存自己的一方蜡染。">
+ <title>一方蜡染｜描一笔蜡，留一方白</title>
+ <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23193b8f'/%3E%3Cpath d='M17 20L47 44M17 44L47 20' stroke='%23f5f1e9' stroke-width='5' stroke-dasharray='5 4'/%3E%3C/svg%3E">
+ <link rel="stylesheet" href="style.css"><script type="module" src="wax-app.mjs"></script>
+</head>
+<body>
+ <div class="atmosphere" aria-hidden="true"></div><div class="calligraphy" aria-hidden="true">一方 · 留白 · 入蜡 · 成章</div>
+ <header class="header"><a class="brand" href="./" aria-label="一方蜡染 首页"><span class="brand-mark" aria-hidden="true">蜡</span><span class="brand-copy"><strong>一方蜡染</strong><small>描一笔蜡，留一方白</small></span></a><div class="header-actions"><span class="edition">手作体验 · 预览版</span><button id="help" class="text-button">体验说明</button><button id="reset" class="text-button" hidden>重新制作</button></div></header>
+ <main>
+  <button id="mobile-progress" class="mobile-progress" aria-expanded="false"><span id="mobile-progress-label">01 / 07 · 图纸</span><small>查看全部步骤</small></button>
+  <nav id="steps" class="steps" aria-label="制作进度"></nav>
+  <div class="workspace">
+   <section class="stage-panel" aria-label="蜡染画布"><div class="stage-heading"><span id="stage-label">01 / 灵感落在布上</span><span id="stage-meta">细棉布 · 靛蓝</span></div><div class="canvas-wrap" id="canvas-wrap"><canvas id="stage" width="800" height="800" aria-label="作品画布"></canvas><div id="fluid-layer" class="fluid-layer" aria-hidden="true" hidden></div><span class="cloth-label">HANDMADE BY YOU</span></div><p id="canvas-hint" class="canvas-hint">每一次渗色，都留一点意外。</p></section>
+   <aside class="controls"><div id="panel"></div><div class="navigation"><button id="back" class="secondary">上一步</button><button id="next" class="primary">开始制作 <span aria-hidden="true">→</span></button></div><p id="step-note" class="step-note"></p></aside>
+  </div>
+  <footer><span>选图 · 描蜡 · 入染 · 显图</span><span class="footer-seal" aria-hidden="true">染</span><span>慢一点，留下手作的痕迹。</span></footer>
+ </main>
+ <div id="toast" class="toast" role="status" aria-live="polite"></div>
+ <dialog id="dialog"><button id="close-dialog" class="dialog-close" aria-label="关闭">×</button><div id="dialog-content"></div></dialog>
+</body>
+</html>
+
