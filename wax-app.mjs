@@ -5,6 +5,7 @@ import {TEMPLATES as templates,FEATURED_COUNT,templateSource} from './wax-templa
 import {PALETTES,DEFAULT_PALETTE,paletteById} from './wax-palettes.mjs';
 import {KNOWLEDGE,cardForStep,nextCard} from './wax-knowledge.mjs';
 import {WaxTrail} from './fluid-trail.mjs';
+import {WaxRemovalRain,dewaxFront} from './wax-removal.mjs';
 
 const $=selector=>document.querySelector(selector);
 const N=640,canvas=$('#stage'),ctx=canvas.getContext('2d');
@@ -13,11 +14,19 @@ const work=document.createElement('canvas');work.width=work.height=N;
 const wc=work.getContext('2d',{willReadFrequently:true});
 const result=document.createElement('canvas');result.width=result.height=N;
 const rc=result.getContext('2d');
+const goldWax=document.createElement('canvas');goldWax.width=goldWax.height=N;
+const gc=goldWax.getContext('2d');
 
 let state={step:0,id:templates[0].id,name:templates[0].name,scale:.78,rotation:0,threshold:170,invert:false,brush:18,bleed:.28,strength:.85,fabric:'cotton',paletteId:DEFAULT_PALETTE,preview:false,seed:4729,immersion:0,dyeComplete:false};
 let showMore=false,source=null,target=new Uint8Array(N*N),wax=new Uint8Array(N*N),undo=[];
 let busy=false,loadVersion=0,drawVersion=0,timer=0,started=0,dyeBefore=0,drag=false,last=null,dirty=true,cached=null;
+let goldDirty=true,dewaxProgress=0,dewaxRunning=false;
 let artRevision=0,exportCache=new Map(),saveUrl='';
+
+const removal=new WaxRemovalRain($('#dewax-layer'),{
+ onFrame:(progress,time)=>{dewaxProgress=progress;draw(time);},
+ onComplete:()=>{if(!dewaxRunning)return;dewaxRunning=false;dewaxProgress=1;$('#canvas-wrap').removeAttribute('aria-busy');go(6);}
+});
 
 const esc=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const palette=()=>paletteById(state.paletteId);
@@ -38,7 +47,7 @@ function applyTheme(){
  const meta=document.querySelector('meta[name=theme-color]');if(meta)meta.content=p.accent;
 }
 function invalidateResult(){
- dirty=true;cached=null;state.immersion=0;state.dyeComplete=false;artRevision++;exportCache.clear();
+ dirty=true;cached=null;goldDirty=true;state.immersion=0;state.dyeComplete=false;artRevision++;exportCache.clear();
 }
 function transition(){
  document.body.classList.remove('turning');void document.body.offsetWidth;
@@ -130,24 +139,32 @@ function render(){
  if(state.step===2)html+=`<p class="description">金色是已经涂上的蜡。笔触只落在图案区域，细小位置可以辅助完成。</p><div class="big-number"><span id="coverage">${Math.round(coverage(target,wax)*100)}</span><small>%</small></div>`+slider('brush','蜡笔大小',state.brush,5,42,1)+`<div class="tool-row"><button id="undo">撤回上一笔</button><button id="assist">辅助填完图案</button></div><label class="hint-box preview-toggle"><input id="preview" type="checkbox" ${state.preview?'checked':''}> 查看当前涂蜡的染后预览</label><canvas id="mini-preview" class="wax-mini" width="160" height="160" aria-label="当前描蜡的染后小样" hidden></canvas><p class="info-note">可保留没涂满的地方；至少覆盖 5% 图案后才能入染。</p>`;
  if(state.step===3)html+=`<p class="description">每次使用一种颜色。靛蓝是传统视觉参考，其余为数字创意配色。</p>${paletteChoices()}<div class="tool-row fabric-choice"><button data-fabric="cotton" aria-pressed="${state.fabric==='cotton'}">${state.fabric==='cotton'?'✓ ':''}细棉布</button><button data-fabric="linen" aria-pressed="${state.fabric==='linen'}">${state.fabric==='linen'?'✓ ':''}棉麻</button></div><p class="material-note">${state.fabric==='cotton'?'细棉布：纹理细腻、颗粒更轻，适合五官与细线较多的图纸。':'棉麻：表面颗粒更明显，画面更质朴；图案形状与细节保持不变。'}</p>`+slider('strength','颜色浓淡',Math.round(state.strength*100),40,100,1,'%')+slider('bleed','边缘渗色',Math.round(state.bleed*100),0,65,1,'%')+`<p class="material-note">渗色调低，蓝白交界更利落；调高，边沿带入更多浅色并略有斑驳，不改变图案形状。</p><p class="info-note">布料、颜色与渗色均为视觉模拟，不代表实物染色预测。</p>`;
  if(state.step===4)html+=`<p class="description">白布先保持原色。染液完全没过布面后，达到 100% 才显示染色结果。</p><div class="big-number"><span id="dye-progress">${Math.floor(state.immersion*100)}</span><small>%</small></div><button id="start-dye" class="soft-button">${state.immersion>=1?'重新浸染':'开始 / 继续浸染'}</button>`;
- if(state.step===5)html+=`<p class="description">真实工艺还需完成去蜡等后续步骤。这里点击布面，确认洗去防染的蜡。</p><button id="remove-wax" class="soft-button">洗去蜡 · 展示成品</button>`;
+ if(state.step===5)html+=`<p class="description">点击布面或按钮，让金黄色蜡迹随粒子落下。约 2.6 秒后，防染留白会完整显现。</p><button id="remove-wax" class="soft-button">洗去蜡 · 显出图案</button>`;
  if(state.step===6)html+=`<span class="result-tag">${palette().name} · ${state.fabric==='linen'?'棉麻':'细棉布'} · 手作体验</span><p class="description">${esc(state.name)}，染好了。保存干净作品图，也可以通过手机系统分享给朋友。</p><div class="completion-actions"><button id="open-save" class="primary">保存作品</button><button id="share-work" class="soft-button" ${navigator.share?'disabled':'hidden'}>${navigator.share?'正在准备分享图片…':'当前浏览器不支持系统分享'}</button></div><div class="result-tools"><button id="redye" class="soft-button">换一种颜色</button><button id="repattern" class="soft-button">换一张图纸</button></div><p class="save-note">默认生成 1600 × 1600 PNG。系统是否提供“保存到相册”或微信，由手机和浏览器决定。</p>`;
  html+=knowledgeEntry();
  $('#panel').innerHTML=html;
  $('#back').hidden=state.step===0;$('#next').hidden=false;
- $('#next').textContent=state.step===6?'保存作品':'下一步 →';$('#next').disabled=busy;
+ $('#next').textContent=state.step===6?'保存作品':state.step===5?'洗去蜡 →':'下一步 →';$('#next').disabled=busy||dewaxRunning;
  $('#step-note').textContent=busy?'正在准备图纸…':'数字手作体验 · 作品默认只保存在当前设备';
  bind();draw();
  if(state.step===6)primeExport();
 }
-function stopAnimation(){cancelAnimationFrame(drawVersion);drawVersion=0;started=0;}
+function stopAnimation(){cancelAnimationFrame(drawVersion);drawVersion=0;started=0;removal.stop();dewaxRunning=false;$('#canvas-wrap').removeAttribute('aria-busy');}
 function go(index){
  if(busy)return;
+ if(index===6&&state.step===5&&dewaxProgress<1){startDewax();return;}
  if(index>=3&&coverage(target,wax)<.05){notify('先描一点蜡，或使用辅助完成。');return;}
  if(index>=5&&!state.dyeComplete){notify('先完成浸染，再去蜡显图。');return;}
- stopAnimation();state.step=index;state.preview=false;transition();render();
+ stopAnimation();dewaxProgress=0;state.step=index;state.preview=false;transition();render();
  $('#panel').scrollTop=0;
  $('#steps').classList.remove('mobile-open');$('#mobile-progress').setAttribute('aria-expanded','false');$('#mobile-progress small').textContent='查看全部步骤';
+}
+function startDewax(){
+ if(dewaxRunning||state.step!==5)return;
+ dewaxRunning=true;dewaxProgress=0;$('#canvas-wrap').setAttribute('aria-busy','true');
+ const button=$('#remove-wax'),next=$('#next'),back=$('#back');
+ if(button){button.disabled=true;button.textContent='金色蜡迹正在落下…';}if(next)next.disabled=true;if(back)back.disabled=true;
+ removal.start();
 }
 function bind(){
  const more=$('#more-templates');if(more)more.onclick=()=>{showMore=!showMore;render();};
@@ -184,7 +201,7 @@ function bind(){
    if(state.immersion<1)drawVersion=requestAnimationFrame(animate);else{state.dyeComplete=true;started=0;drawVersion=0;notify('浸染完成，可以去蜡了。');}
   };drawVersion=requestAnimationFrame(animate);
  };
- const removeWax=$('#remove-wax');if(removeWax)removeWax.onclick=()=>go(6);
+ const removeWax=$('#remove-wax');if(removeWax)removeWax.onclick=startDewax;
  const redye=$('#redye');if(redye)redye.onclick=()=>go(3);
  const repattern=$('#repattern');if(repattern)repattern.onclick=()=>go(0);
  const uploadButton=$('#upload');if(uploadButton)uploadButton.onclick=()=>$('#file').click();
@@ -193,7 +210,7 @@ function bind(){
  const save=$('#open-save');if(save)save.onclick=()=>openSavePanel('art');
 }
 $('#back').onclick=()=>go(state.step-1);
-$('#next').onclick=()=>state.step===6?openSavePanel('art'):go(state.step+1);
+$('#next').onclick=()=>state.step===6?openSavePanel('art'):state.step===5?startDewax():go(state.step+1);
 
 async function upload(file){
  if(!file)return;const version=++loadVersion;busy=true;render();
@@ -212,6 +229,14 @@ function dyed(){
  if(dirty||!cached){cached=renderDye(wax,N,{...state,dye:palette().dye});rc.putImageData(new ImageData(cached,N,N),0,0);dirty=false;}
  return result;
 }
+function waxLayer(){
+ if(goldDirty){
+  const image=gc.createImageData(N,N);
+  for(let i=0;i<N*N;i++)if(wax[i]){const offset=i*4;image.data[offset]=255;image.data[offset+1]=210;image.data[offset+2]=31;image.data[offset+3]=232;}
+  gc.clearRect(0,0,N,N);gc.putImageData(image,0,0);goldDirty=false;
+ }
+ return goldWax;
+}
 function draw(time=performance.now()){
  canvas.style.touchAction=state.step===2?'none':'auto';
  ctx.clearRect(0,0,800,800);ctx.fillStyle='#e4e1d8';ctx.fillRect(0,0,800,800);
@@ -227,13 +252,16 @@ function draw(time=performance.now()){
   for(let i=0;i<N*N;i++){const color=wax[i]?[204,159,67]:target[i]?[164,166,157]:[243,240,225];for(let c=0;c<3;c++)data[i*4+c]=color[c];data[i*4+3]=255;}
   wc.putImageData(new ImageData(data,N,N),0,0);ctx.drawImage(work,margin,margin,size,size);
  }
- if(state.step===5){ctx.fillStyle='rgba(222,185,107,.42)';ctx.fillRect(margin,margin,size,size);ctx.fillStyle='#26384c';ctx.font='20px "Songti SC",serif';ctx.textAlign='center';ctx.fillText('点击布面 · 洗去防染的蜡',400,400);}
+ if(state.step===5){
+  const front=dewaxFront(dewaxProgress);ctx.save();ctx.beginPath();ctx.rect(margin,front,size,margin+size-front);ctx.clip();ctx.drawImage(waxLayer(),margin,margin,size,size);ctx.restore();
+  if(!dewaxRunning){ctx.fillStyle='rgba(248,243,232,.88)';ctx.fillRect(240,371,320,58);ctx.fillStyle='#26384c';ctx.font='20px "Songti SC",serif';ctx.textAlign='center';ctx.fillText('点击布面 · 洗去防染的蜡',400,407);}
+ }
  const mini=$('#mini-preview');if(mini){mini.hidden=!state.preview;if(state.preview)mini.getContext('2d').drawImage(dyed(),0,0,160,160);}
 }
 function point(event){const rect=canvas.getBoundingClientRect();return{x:((event.clientX-rect.left)/rect.width*800-72)/656*N,y:((event.clientY-rect.top)/rect.height*800-72)/656*N};}
 function trailPoint(point){return{x:(72+point.x/N*656)/800,y:(72+point.y/N*656)/800};}
 canvas.addEventListener('pointerdown',event=>{
- if(state.step===5){go(6);return;}if(state.step!==2||busy)return;
+ if(state.step===5){startDewax();return;}if(state.step!==2||busy)return;
  const p=point(event);if(p.x<0||p.y<0||p.x>=N||p.y>=N)return;
  event.preventDefault();saveUndo();drag=true;last=p;canvas.setPointerCapture(event.pointerId);paint(target,wax,N,p.x,p.y,state.brush);const feedback=trailPoint(p);trail.splat(feedback.x,feedback.y,state.brush,event.timeStamp);invalidateResult();draw();
 });
