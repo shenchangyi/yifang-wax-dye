@@ -3,24 +3,31 @@ const clamp=value=>Math.max(0,Math.min(1,value));
 
 export class WaxAudio{
  constructor(){
-  this.enabled=localStorage.getItem('wax-sound')!=='off';
+  try{localStorage.removeItem('wax-sound');}catch{}this.enabled=true;
   this.context=null;this.effectsBus=null;this.wax=null;this.active=[];
-  this.music=null;this.musicIndex=0;this.musicUnlocked=false;this.musicLevel=.18;this.duckLevel=.10;this.fadeFrame=0;this.duckTimer=0;
+  this.music=null;this.musicIndex=0;this.musicUnlocked=false;this.musicStarting=false;this.musicLevel=.18;this.duckLevel=.10;this.fadeFrame=0;this.duckTimer=0;
   this.musicSources=['assets/audio/background.mp3','assets/audio/background.m4a','assets/audio/background.ogg'];
   document.documentElement.dataset.sound=this.enabled?'on':'off';
   document.documentElement.dataset.music='waiting';
-  const unlock=()=>{this.musicUnlocked=true;this.ensure();this.startMusic();};
-  document.addEventListener('pointerdown',unlock,{once:true,capture:true});
-  document.addEventListener('keydown',unlock,{once:true,capture:true});
+  this.unlockBound=false;this.unlock=()=>{if(!this.enabled)return;this.musicUnlocked=true;this.ensure();this.startMusic();};
+  this.bindUnlock();this.createMusic();
   document.addEventListener('visibilitychange',()=>{
    if(document.hidden){this.stopEffects();if(this.music&&!this.music.paused)this.music.pause();}
    else if(this.enabled&&this.musicUnlocked)this.startMusic();
   });
  }
+ bindUnlock(){
+  if(this.unlockBound)return;this.unlockBound=true;
+  for(const type of ['pointerdown','touchend','click','keydown'])document.addEventListener(type,this.unlock,{capture:true,passive:true});
+ }
+ releaseUnlock(){
+  if(!this.unlockBound)return;this.unlockBound=false;
+  for(const type of ['pointerdown','touchend','click','keydown'])document.removeEventListener(type,this.unlock,{capture:true});
+ }
  isEnabled(){return this.enabled;}
  setEnabled(value){
-  this.enabled=Boolean(value);localStorage.setItem('wax-sound',this.enabled?'on':'off');document.documentElement.dataset.sound=this.enabled?'on':'off';
-  if(this.enabled){this.musicUnlocked=true;this.ensure();this.startMusic();}else{this.stopEffects();this.pauseMusic();}
+  this.enabled=Boolean(value);document.documentElement.dataset.sound=this.enabled?'on':'off';
+  if(this.enabled){this.musicUnlocked=true;this.bindUnlock();this.ensure();this.startMusic();}else{this.releaseUnlock();this.stopEffects();this.pauseMusic();}
   return this.enabled;
  }
  ensure(){
@@ -33,7 +40,7 @@ export class WaxAudio{
   const music=new Audio(this.musicSources[this.musicIndex]);music.loop=true;music.preload='auto';music.playsInline=true;music.volume=0;
   music.addEventListener('canplay',()=>{document.documentElement.dataset.music='ready';},{once:true});
   music.addEventListener('error',()=>{
-   if(this.music!==music)return;this.music=null;this.musicIndex++;
+   if(this.music!==music)return;this.musicStarting=false;this.music=null;this.musicIndex++;
    if(this.musicIndex<this.musicSources.length){this.createMusic();if(this.enabled&&this.musicUnlocked)this.startMusic();}
    else document.documentElement.dataset.music='missing';
   },{once:true});
@@ -41,8 +48,11 @@ export class WaxAudio{
  }
  startMusic(){
   if(!this.enabled||!this.musicUnlocked)return;const music=this.createMusic();if(!music)return;
-  document.documentElement.dataset.music='loading';const result=music.play();
-  if(result?.then)result.then(()=>{document.documentElement.dataset.music='playing';this.fadeMusic(this.musicLevel,1200);}).catch(()=>{if(this.music===music)document.documentElement.dataset.music='blocked';});
+  if(!music.paused){this.releaseUnlock();document.documentElement.dataset.music='playing';return;}
+  if(this.musicStarting)return;this.musicStarting=true;document.documentElement.dataset.music='loading';const result=music.play();
+  const playing=()=>{if(this.music!==music)return;this.musicStarting=false;this.releaseUnlock();document.documentElement.dataset.music='playing';this.fadeMusic(this.musicLevel,1200);};
+  const blocked=()=>{if(this.music!==music)return;this.musicStarting=false;document.documentElement.dataset.music='blocked';this.bindUnlock();};
+  if(result?.then)result.then(playing).catch(blocked);else playing();
  }
  pauseMusic(){
   cancelAnimationFrame(this.fadeFrame);this.fadeFrame=0;if(this.music){this.music.pause();this.music.volume=0;}
